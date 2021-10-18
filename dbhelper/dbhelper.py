@@ -1,6 +1,7 @@
+import copy
 import hashlib
 import json
-import os
+import re
 from datetime import datetime, date
 from pathlib import Path
 from shutil import copyfile
@@ -24,6 +25,8 @@ SEMESTER_MAPPINGS = {
 
 PathLike = TypeVar("PathLike", str, Path)
 
+HASH_REGEX = re.compile(r"^[0-9a-f]{40}$")
+
 
 def format_exam(exam: Exam, count_files: bool = True, show_date_added: bool = False) -> str:
     s = (("" if exam.id == Exam.NO_ID else f"[{exam.id}] ") +
@@ -37,6 +40,15 @@ def format_exam(exam: Exam, count_files: bool = True, show_date_added: bool = Fa
     return s
 
 
+def ask_confirm(message: str) -> bool:
+    ans = ""
+    while ans.lower() not in ["y", "n"]:
+        ans = input(f"{message} (Y/n) ")
+        if not ans:
+            ans = "y"
+    return ans.lower() == "y"
+
+
 class DatabaseHelper:
     """
     Class used to do operations on the database.
@@ -48,37 +60,47 @@ class DatabaseHelper:
     def __init__(self, db: Database):
         self.db = db
         self.file_hashes = {}
-        for e in self.db.exams.values():
-            for h in e.hashes:
-                self._add_hash(h)
+        self._load_hashes()
 
-    def add_exam(self, course: str, author: str, year: int, semester: str, title: str,
-                 files: List[PathLike], course_name: str = None, date_added: date = None,
-                 force: bool = False, silent: bool = False) -> Optional[Exam]:
+    def add_exam(self, course: Optional[str], author: Optional[str], year: Optional[int],
+                 semester: Optional[str], title: Optional[str], files: List[PathLike],
+                 course_name: Optional[str] = None, date_added: Optional[date] = None,
+                 force: bool = False, confirm: bool = False,
+                 silent: bool = False) -> Optional[Exam]:
         # basic input validation
         if author is not None:
             author = author.strip()
-            if not author:
-                print("WARNING: no author name provided")
-                author = None
+        if not author and not silent:
+            print("WARNING: no author name provided")
+            author = None
+
         if title is not None:
             title = title.strip()
-            if not title:
-                print("WARNING: no exam title provided")
-                title = None
+        if not title and not silent:
+            print("WARNING: no exam title provided")
+            title = None
+
         if not isinstance(year, int) or year > datetime.today().year:
-            raise DatabaseError("Invalid exam year")
+            raise DatabaseError("Invalid or missing exam year")
+
+        if not semester:
+            raise DatabaseError(f"Semester is required")
         semester_num = SEMESTER_MAPPINGS.get(semester.lower(), None)
         if semester_num is None:
             raise DatabaseError(f"Invalid exam semester '{semester}'")
+
         if not files:
             raise DatabaseError("At least one file per exam is required")
-        if not date_added:
-            date_added = datetime.today()
+
+        if not course:
+            raise DatabaseError("Course code is required")
         try:
             course = Course.parse(course.lower())
         except ValueError:
             raise DatabaseError(f"Invalid course code '{course}'")
+
+        if not date_added:
+            date_added = datetime.today()
 
         hashes = []
         exam = Exam(Exam.NO_ID, course, author, year, ExamSemester(semester_num),
@@ -94,27 +116,23 @@ class DatabaseHelper:
                           f"Use --force to override check.")
                     return None
 
-        # hash and add files
-        for file in files:
-            try:
-                hashes.append(self._hash_and_add_file(file))
-            except IOError as e:
-                # error, cleanup added files
-                for h in hashes:
-                    self._remove_file(h)
-                raise DatabaseError(f"Error while hashing file '{file}': {e}") from e
+        # confirm
+        if confirm:
+            print(format_exam(exam, count_files=False))
+            if not ask_confirm("Add exam to database?"):
+                return
 
-        try:
-            self.db.add_exam(exam, course_name)
-            print(format_exam(exam))
-            if not silent:
-                print("Successfully added exam to database")
-            return exam
-        except DatabaseError as e:
-            # error, cleanup added files
-            for h in hashes:
-                self._remove_file(h)
-            raise e
+        # hash and add files
+        hashes += self.hash_files(files, silent)
+
+        self.db.add_exam(exam, course_name)
+        for h in hashes:
+            self._use_hash(h)
+
+        print(format_exam(exam))
+        if not silent:
+            print("Successfully added exam to database")
+        return exam
 
     def batch_add_exam(self, batch_json: PathLike, force: bool = False) -> None:
         with open(batch_json, "r") as batch_file:
@@ -137,11 +155,104 @@ class DatabaseHelper:
                         force=force, silent=True)
                     if exam:
                         count += 1
-                except KeyError:
-                    raise DatabaseError("Missing field for exam in batch data JSON")
+                except KeyError as e:
+                    raise DatabaseError(f"Missing field for exam in batch data JSON: {e}")
             print(f"Successfully added {count} exams to database")
 
-    def list_exams(self, course: str, author: str, year: int, semester: str) -> None:
+    def edit_exam(self, exam_id: Optional[int], course: Optional[str], author: Optional[str],
+                  year: Optional[int], semester: Optional[str], title: Optional[str],
+                  course_name: Optional[str], hashes: List[str], confirm: bool = False):
+        try:
+            exam = self.db.exams[exam_id]
+        except KeyError:
+            raise DatabaseError(f"Exam ID {exam_id} doesn't exist")
+
+        new_exam = copy.copy(exam)
+        if course is not None:
+            try:
+                course = Course.parse(course.lower())
+            except ValueError:
+                raise DatabaseError(f"Invalid course code '{course}'")
+            new_exam.course = course
+            if course not in self.db.course_names and course_name is None:
+                raise DatabaseError("Expected course name for course that doesn't exist yet")
+        elif course_name is not None:
+            raise DatabaseError("Course name given without course code")
+
+        if author is not None:
+            author = author.strip()
+            if not author:
+                author = None
+            new_exam.author = author
+
+        if title is not None:
+            title = title.strip()
+            if not title:
+                title = None
+            new_exam.title = title
+
+        if year is not None:
+            if year > datetime.today().year:
+                raise DatabaseError("Invalid exam year")
+            new_exam.year = year
+
+        if semester is not None:
+            semester_num = SEMESTER_MAPPINGS.get(semester.lower(), None)
+            if semester_num is None:
+                raise DatabaseError(f"Invalid exam semester '{semester}'")
+            new_exam.semester = ExamSemester(semester_num)
+
+        if hashes is not None:
+            for i, file_hash in enumerate(hashes):
+                file_hash = file_hash.lower()
+                found = 0
+                for h in self.file_hashes.keys():
+                    if h.startswith(file_hash):
+                        hashes[i] = h
+                        found += 1
+                if found == 0:
+                    raise DatabaseError(f"Hash doesn't exist in database '{file_hash}'")
+                elif found > 1:
+                    raise DatabaseError(f"Hash is ambiguous '{file_hash}'")
+            new_exam.hashes = hashes
+
+        # confirm
+        if confirm:
+            print(f"Old exam: {format_exam(exam)}")
+            print(f"New exam: {format_exam(new_exam)}")
+            if course_name is not None:
+                if course in self.db.course_names:
+                    print(f"Course name changes from '{self.db.course_names[course]}' "
+                          f"to '{course_name}'")
+                else:
+                    print(f"New course name: '{course_name}'")
+            if not ask_confirm("Edit exam in database?"):
+                return
+
+        # edit course name if needed
+        if course_name is not None and course in self.db.course_names:
+            self.db.course_names[course] = course_name
+
+        # edit exam
+        del self.db.exams[exam_id]
+        self.db.add_exam(new_exam, course_name)
+        print("Successfully edited exam in database.")
+
+    def hash_files(self, files: List[PathLike], silent: bool = False) -> List[str]:
+        hashes = []
+        for file in files:
+            try:
+                file_hash = self._hash_and_add_file(file)
+                hashes.append(file_hash)
+                if not silent:
+                    print(f"{file_hash}: {file}")
+            except IOError as e:
+                raise DatabaseError(f"Error while hashing file '{file}': {e}") from e
+        return hashes
+
+    def list_exams(self, course: Optional[str], author: Optional[str],
+                   year: Optional[int], semester: Optional[str],
+                   show_hashes: bool = False) -> None:
         if course is not None:
             try:
                 course = Course.parse(course)
@@ -166,6 +277,10 @@ class DatabaseHelper:
                                   e.year, e.title or "", e.id))
         for exam in exams:
             print(format_exam(exam, count_files=True, show_date_added=True))
+            if show_hashes:
+                for h in exam.hashes:
+                    print(f"  {h}")
+                print("--------------------------------------------")
         print(f"{len(exams)} exams found for query")
 
     def _hash_and_add_file(self, filename: PathLike) -> str:
@@ -184,7 +299,6 @@ class DatabaseHelper:
 
         with open(filepath, "rb") as file:
             h = hashlib.sha1(file.read()).hexdigest()
-            self._add_hash(h)
 
             # copy file to database
             dst_path = self._get_file_for_hash(h)
@@ -193,23 +307,26 @@ class DatabaseHelper:
                 copyfile(filename, dst_path)
             return h
 
-    def _remove_file(self, h: str):
-        """Remove file from database. If hash is used only once, file is deleted.
-        Otherwise file is kept for its other uses."""
-        if h not in self.file_hashes:
-            return
+    def _load_hashes(self):
+        """Load hashes from database files."""
+        # load all hashes
+        hash_path = self.db.path / EXAM_DIR_NAME
+        for subdir in hash_path.iterdir():
+            for file in subdir.iterdir():
+                if file.is_file() and file.suffix == FILE_EXTENSION and \
+                        HASH_REGEX.match(file.stem):
+                    self.file_hashes[file.stem] = 0
 
-        self.file_hashes[h] -= 1
-        if self.file_hashes == 0:
-            # last use of hash, remove file
-            del self.file_hashes[h]
-            os.remove(self._get_file_for_hash(h))
+        # update use count from exam
+        for exam in self.db.exams.values():
+            for h in exam.hashes:
+                self._use_hash(h)
 
-    def _add_hash(self, h: str) -> None:
+    def _use_hash(self, h: str) -> None:
+        """Increment use count for hash. Use count is needed for garbage collection."""
         if h not in self.file_hashes:
-            self.file_hashes[h] = 1
-        else:
-            self.file_hashes[h] += 1
+            raise DatabaseError(f"Hash not in database: {h}")
+        self.file_hashes[h] += 1
 
     def _get_file_for_hash(self, h: str) -> Path:
         hash_path = self.db.path / EXAM_DIR_NAME / h[:EXAM_DIR_HASH_SUBDIV]

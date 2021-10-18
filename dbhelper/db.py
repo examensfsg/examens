@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -106,9 +107,7 @@ class Database:
         try:
             with open(db_path / f"{course_code}.json", "r") as course_file:
                 course_json = json.load(course_file)
-                if not course_name.strip():
-                    raise DatabaseError("Course name cannot be blank")
-                self.course_names[course] = course_name
+                self.add_course(course, course_name)
                 for exam in course_json:
                     self._load_exam(course, exam)
         except IOError as e:
@@ -125,7 +124,7 @@ class Database:
 
         # parse author
         author = exam_json.get(DB_EXAM_AUTHOR_FIELD, None)
-        if not isinstance(author, str):
+        if author is not None and not isinstance(author, str):
             raise DatabaseError(f"Exam {exam_id} author is invalid")
 
         # parse year
@@ -140,7 +139,7 @@ class Database:
         semester = ExamSemester(semester)
 
         title = exam_json.get(DB_EXAM_TITLE_FIELD, None)
-        if not isinstance(title, str):
+        if title is not None and not isinstance(title, str):
             raise DatabaseError(f"Exam {exam_id} title is invalid or missing")
 
         # parse added date
@@ -185,12 +184,16 @@ class Database:
             self.last_id = exam.id
 
         if exam.course not in self.course_names:
-            if course_name is None or not course_name.strip():
+            if course_name is None:
                 raise DatabaseError(f"First exam for course {exam.course}, course name expected")
-            else:
-                self.course_names[exam.course] = course_name
+            self.add_course(exam.course, course_name)
 
         self.exams[exam.id] = exam
+
+    def add_course(self, course: Course, name: str) -> None:
+        if not name.strip():
+            raise DatabaseError("Course name cannot be blank")
+        self.course_names[course] = name
 
     def save(self):
         """Save database as JSON files."""
@@ -205,7 +208,14 @@ class Database:
         db_path = self.path / DB_DIR_NAME
         db_path.mkdir(parents=True, exist_ok=True)
         with open(db_path / f"{DB_ROOT_NAME}.json", "w") as db_root_file:
-            courses = {course.canonical_name(): name for course, name in self.course_names.items()}
+            courses = {}
+            for course, name in self.course_names.items():
+                cname = course.canonical_name()
+                if course in course_exams:
+                    courses[cname] = name
+                else:
+                    # no exams for course, delete json file if it exists
+                    os.remove(db_path / f"{cname}.json")
             json.dump(courses, db_root_file, separators=(',', ':'), ensure_ascii=False)
 
         # save JSON file per course
