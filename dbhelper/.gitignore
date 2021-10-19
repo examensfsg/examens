@@ -2,3 +2,4 @@ dev/
 todo.txt
 venv/
 .idea/
+__pycache__/

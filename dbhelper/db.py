@@ -88,10 +88,11 @@ class Database:
         db_path = self.path / DB_DIR_NAME
         try:
             with open(db_path / f"{DB_ROOT_NAME}.json", "r") as db_root_file:
-                db_root = json.load(db_root_file)
-                if not isinstance(db_root, dict):
+                root_json = json.load(db_root_file)
+                courses_json = root_json.get("courses", None)
+                if not isinstance(courses_json, dict):
                     raise DatabaseError("Invalid root database JSON")
-                for code, name in db_root.items():
+                for code, name in courses_json.items():
                     self._load_course(code, name)
         except IOError:
             # file doesn't exist? ignore it.
@@ -208,6 +209,7 @@ class Database:
         db_path = self.path / DB_DIR_NAME
         db_path.mkdir(parents=True, exist_ok=True)
         with open(db_path / f"{DB_ROOT_NAME}.json", "w") as db_root_file:
+            root_json = {}
             courses = {}
             for course, name in self.course_names.items():
                 cname = course.canonical_name()
@@ -216,7 +218,10 @@ class Database:
                 else:
                     # no exams for course, delete json file if it exists
                     os.remove(db_path / f"{cname}.json")
-            json.dump(courses, db_root_file, separators=(',', ':'), ensure_ascii=False)
+            root_json["courses"] = courses
+            root_json["exam_count"] = len(self.exams)
+
+            json.dump(root_json, db_root_file, separators=(',', ':'), ensure_ascii=False)
 
         # save JSON file per course
         for course, exams in course_exams.items():

@@ -269,7 +269,6 @@ class DatabaseHelper:
                 self.file_hashes[h] -= 1
         print(f"Successfully deleted {len(exams)} exams from the database")
 
-
     def hash_files(self, files: List[PathLike], silent: bool = False) -> List[str]:
         hashes = []
         for file in files:
