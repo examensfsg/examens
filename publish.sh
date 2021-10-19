@@ -16,13 +16,13 @@ set -e
 
 git switch database
 git merge master --squash -X theirs   # note that deleted files on master will still be present!
-# --> ./main.py add ...
+# --> dbhelper/main.py add ...
 git add exam/ db/
 
 git commit -m "database update"
 # if commit is amended, github will not diff objects correctly and the whole thing is reuploaded!
 # so only change history once in a while, squashing commits.
-git rebase -i HEAD~n
+git rebase -i master -X theirs
 
 # --> git push -f
 git switch master
