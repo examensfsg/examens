@@ -69,11 +69,21 @@ edit_parser.add_argument(
     help="Exam file hashes (will match partial hash start)")
 add_no_confirm_option(edit_parser)
 
+# remove command
+remove_parser = subparsers.add_parser("remove", help="Remove exams from the database")
+remove_parser.add_argument(
+    type=int, nargs="+", action="store", dest="exam_ids",
+    help="Exam IDs to remove")
+add_no_confirm_option(remove_parser)
+
 # hash command
-edit_parser = subparsers.add_parser("hash", help="Hash PDF files and add them to database")
-edit_parser.add_argument(
-    type=str, nargs="+", action="store", dest="files",
+hash_parser = subparsers.add_parser("hash", help="Hash PDF files and add them to database")
+hash_parser.add_argument(
+    type=str, nargs="*", action="store", dest="files",
     help="PDF files to hash")
+hash_parser.add_argument(
+    "--gc", action="store_true", dest="gc", default=False,
+    help="Set to garbage collect unused hashes")
 
 # list command
 list_parser = subparsers.add_parser("list", help="List exams")
@@ -121,8 +131,12 @@ def main():
         elif args.command == "edit":
             helper.edit_exam(args.id, args.course, args.author, args.year, args.semester,
                              args.title, args.course_name, args.hashes, confirm=args.confirm)
+        elif args.command == "remove":
+            helper.remove_exams(args.exam_ids, args.confirm)
         elif args.command == "hash":
             helper.hash_files(args.files)
+            if args.gc:
+                helper.garbarge_collect()
         elif args.command == "list":
             helper.list_exams(args.course, args.author, args.year, args.semester, args.show_hashes)
         elif args.command == "rewrite":

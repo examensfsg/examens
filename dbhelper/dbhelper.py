@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import json
+import os
 import re
 from datetime import datetime, date
 from pathlib import Path
@@ -88,6 +89,7 @@ class DatabaseHelper:
         semester_num = SEMESTER_MAPPINGS.get(semester.lower(), None)
         if semester_num is None:
             raise DatabaseError(f"Invalid exam semester '{semester}'")
+        semester = ExamSemester(semester_num)
 
         if not files:
             raise DatabaseError("At least one file per exam is required")
@@ -103,14 +105,15 @@ class DatabaseHelper:
             date_added = datetime.today()
 
         hashes = []
-        exam = Exam(Exam.NO_ID, course, author, year, ExamSemester(semester_num),
+        exam = Exam(Exam.NO_ID, course, author, year, semester,
                     title, date_added, hashes)
 
         # check if similar doesn't already exist
         if not force:
             for e in self.db.exams.values():
                 if title is not None and e.title is not None and \
-                        title.lower() == e.title.lower() and year == e.year and course == e.course:
+                        title.lower() == e.title.lower() and year == e.year and \
+                        semester == e.semester and course == e.course:
                     # exam has same title, same year, same course: most likely the same exam
                     print(f"Duplicate exam? {format_exam(exam, count_files=False)}. "
                           f"Use --force to override check.")
@@ -236,7 +239,36 @@ class DatabaseHelper:
         # edit exam
         del self.db.exams[exam_id]
         self.db.add_exam(new_exam, course_name)
+
+        # update hashes
+        for h in exam.hashes:
+            self.file_hashes[h] -= 1
+        for h in new_exam.hashes:
+            self._use_hash(h)
+
         print("Successfully edited exam in database.")
+
+    def remove_exams(self, exam_ids: List[int], confirm: bool = False) -> None:
+        exams = []
+        for exam_id in exam_ids:
+            exam = self.db.exams.get(exam_id, None)
+            if not exam:
+                raise DatabaseError(f"Exam ID {exam_id} is not in database")
+            exams.append(exam)
+
+        # print exams and confirm
+        for exam in exams:
+            print(format_exam(exam))
+        if confirm and not ask_confirm("Delete these exams from the database?"):
+            return
+
+        # delete exams and update hashes
+        for exam in exams:
+            del self.db.exams[exam.id]
+            for h in self.file_hashes:
+                self.file_hashes[h] -= 1
+        print(f"Successfully deleted {len(exams)} exams from the database")
+
 
     def hash_files(self, files: List[PathLike], silent: bool = False) -> List[str]:
         hashes = []
@@ -283,6 +315,25 @@ class DatabaseHelper:
                 print("--------------------------------------------")
         print(f"{len(exams)} exams found for query")
 
+    def garbarge_collect(self) -> None:
+        count = 0
+        freed = 0
+        removed_hashes = []
+        for h, uses in self.file_hashes.items():
+            if uses == 0:
+                try:
+                    path = self._get_file_for_hash(h)
+                    freed += os.path.getsize(path)
+                    os.remove(path)
+                except IOError as e:
+                    raise DatabaseError(f"Could not remove hash '{h}': {e}")
+                removed_hashes.append(h)
+                print(h)
+                count += 1
+        for h in removed_hashes:
+            del self.file_hashes[h]
+        print(f"Removed {count} hashes, freed {freed / 1048576:.1f} MB")
+
     def _hash_and_add_file(self, filename: PathLike) -> str:
         """
         Hash and add file to the database. File must be one of the accepted formats.
@@ -301,21 +352,25 @@ class DatabaseHelper:
             h = hashlib.sha1(file.read()).hexdigest()
 
             # copy file to database
-            dst_path = self._get_file_for_hash(h)
-            dst_path.parent.mkdir(parents=True, exist_ok=True)
-            if not dst_path.exists():
+            if h not in self.file_hashes:
+                dst_path = self._get_file_for_hash(h)
+                dst_path.parent.mkdir(parents=True, exist_ok=True)
+                if dst_path.exists():
+                    raise DatabaseError("File for hash already exists")
                 copyfile(filename, dst_path)
+                self.file_hashes[h] = 0
             return h
 
     def _load_hashes(self):
         """Load hashes from database files."""
         # load all hashes
         hash_path = self.db.path / EXAM_DIR_NAME
-        for subdir in hash_path.iterdir():
-            for file in subdir.iterdir():
-                if file.is_file() and file.suffix == FILE_EXTENSION and \
-                        HASH_REGEX.match(file.stem):
-                    self.file_hashes[file.stem] = 0
+        if hash_path.exists():
+            for subdir in hash_path.iterdir():
+                for file in subdir.iterdir():
+                    if file.is_file() and file.suffix == FILE_EXTENSION and \
+                            HASH_REGEX.match(file.stem):
+                        self.file_hashes[file.stem] = 0
 
         # update use count from exam
         for exam in self.db.exams.values():
