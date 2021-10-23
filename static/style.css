@@ -2,17 +2,18 @@
     box-sizing: border-box;
 }
 
-body {
+html, body {
     color: #333;
     margin: 0 auto;
     max-width: 50em;
     font-family: "Helvetica", "Arial", sans-serif;
     line-height: 1.5;
-    padding: 2em 1em;
+    padding: 0 1em;
+    height: 100%;
 }
 
 h1 {
-    padding: 0;
+    padding: 1em 0 0 0;
     margin: 0;
 }
 
@@ -73,6 +74,7 @@ h2 {
     cursor: pointer;
     color: #888;
 }
+
 .file-item:hover {
     color: inherit;
 }
@@ -80,4 +82,28 @@ h2 {
 .listitem-start {
     font-family: monospace;
     font-weight: bold;
+}
+
+.box {
+    display: flex;
+    flex-flow: column;
+    height: 100%;
+}
+
+section {
+    flex: 1 1 auto;
+}
+
+footer {
+    display: inline;
+    flex: 0 1 2em;
+    width: 100%;
+    text-align: center;
+    vertical-align: center;
+    padding: 1em;
+}
+
+footer a {
+    text-decoration: none;
+    margin: 0 1em;
 }

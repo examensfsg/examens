@@ -6,15 +6,23 @@
     <title>Banque d'examens FSG</title>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     <script src="static/utils.js"></script>
-    <script src="static/search.js"></script>
+    <script src="static/index.js"></script>
     <link href="static/style.css" rel="stylesheet"/>
     <link rel="icon" href="data:,">
 </head>
 <body>
-    <h1><a href=".">Banque d'examens FSG</a></h1>
-    <p class="exam_count"><span id="exam_count">—</span> examens disponibles</p>
-    <label for="search" hidden="hidden">Recherche</label>
-    <input id="search" type="text" class="search" name="fsg_exam_search" placeholder="Trouver un cours" autofocus/>
-    <ul class="list" id="course-list"></ul>
+<div class="box">
+    <section>
+        <h1><a href=".">Banque d'examens FSG</a></h1>
+        <p class="exam_count"><span id="exam_count">—</span> examens disponibles</p>
+        <label for="search" hidden="hidden">Recherche</label>
+        <input id="search" type="text" class="search" name="fsg_exam_search" placeholder="Trouver un cours" autofocus/>
+        <ul class="list" id="course-list"></ul>
+    </section>
+    <footer>
+        <a href="https://forms.gle/QUWjPy881r6FYo9u8">Soumettre un examen</a>
+        <a href="https://forms.gle/XwmN4mxGK5nUCNp27">Contact</a>
+    </footer>
+</div>
 </body>
 </html>

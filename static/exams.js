@@ -8,7 +8,7 @@ function load_exams() {
         $("#course-code").text(course_code.toUpperCase());
         $.getJSON(`${DB_LOCATION}${course_code}.json`, data => {
             exams_list = data.exams;
-            search(null);
+            search();
 
             $("#course-code").text(`${course_code.toUpperCase()} — ${data.name}`);
             $("#exam_count").text(exams_list?.length ?? 0);
@@ -25,15 +25,13 @@ function load_exams() {
     selected_id = parseInt(window.location.hash.substr(1));
 }
 
-/**
- * Update exams list for search query.
- * @param query Search query, can be null for none.
- */
-function search(query) {
+function search() {
     if (!exams_list) {
         // invalid code / no exams
         return;
     }
+
+    const query = $("#search").val();
 
     // Sort exams by year (descending) then semester.
     let exams = exams_list.slice();

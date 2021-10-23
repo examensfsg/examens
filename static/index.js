@@ -6,14 +6,16 @@ let courses_dict = null;
 function load_courses() {
     $.getJSON(DB_LOCATION + COURSES_JSON, data => {
         courses_dict = data.courses;
-        search(null);
+        search();
 
         // Set exam count
         $("#exam_count").text(data.exam_count);
     })
 }
 
-function search(query) {
+function search() {
+    const query = $("#search").val();
+
     // Get courses code and name from root JSON, sort alphabetically by course code
     let courses = [];
     for (let code in courses_dict) {

@@ -19,11 +19,11 @@ function register_search_events(element, callback) {
     element.on("keyup", _ => {
         clearTimeout(debounce);
         debounce = setTimeout(() => {
-            callback(element.val())
+            callback()
         }, SEARCH_DEBOUNCE)
     }).keypress(e => {
         if (e.which === 13) {
-            callback(element.val());
+            callback();
             return false;
         }
     })
