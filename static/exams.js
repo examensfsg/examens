@@ -1,40 +1,24 @@
-EXAMS_LOCATION = "db/";
-ROOT_DB_JSON = "db/root.json";
-
-SEARCH_DEBOUNCE = 250;
-
-let exams_json = null;
+let exams_list = null;
 let selected_id = 0;
-
-String.prototype.removeDiacritics = function () {
-    return this.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-};
 
 function load_exams() {
     const search_params = new URLSearchParams(window.location.search);
     const course_code = search_params.get("course");
     if (course_code) {
-        $("#exam_count").text(0);
         $("#course-code").text(course_code.toUpperCase());
-        $.getJSON(`${EXAMS_LOCATION}${course_code}.json`, data => {
-            exams_json = data;
+        $.getJSON(`${DB_LOCATION}${course_code}.json`, data => {
+            exams_list = data.exams;
             search(null);
 
-            // Set exam count
-            $("#exam_count").text(exams_json?.length ?? 0);
+            $("#course-code").text(`${course_code.toUpperCase()} — ${data.name}`);
+            $("#exam_count").text(exams_list?.length ?? 0);
         }).fail(() => {
             // Invalid course code, redirect to main page.
-            window.location.href = "index.html";
-        });
-        $.getJSON(ROOT_DB_JSON, data => {
-            const course_name = data.courses?.[course_code];
-            if (course_name) {
-                $("#course-code").text(`${course_code.toUpperCase()} — ${course_name}`);
-            }
+            window.location.href = ".";
         });
     } else {
         // Invalid course code, redirect to main page.
-        window.location.href = "index.html";
+        window.location.href = ".";
     }
 
     // Restore selected exam ID
@@ -46,13 +30,13 @@ function load_exams() {
  * @param query Search query, can be null for none.
  */
 function search(query) {
-    if (!exams_json) {
+    if (!exams_list) {
         // invalid code / no exams
         return;
     }
 
     // Sort exams by year (descending) then semester.
-    let exams = exams_json.slice();
+    let exams = exams_list.slice();
     exams.sort((a, b) => (b.y - a.y) || (a.s - b.s));
 
     // Filter courses if search query given
@@ -62,12 +46,16 @@ function search(query) {
             const title_norm = exam.t.toLowerCase().removeDiacritics();
             const author_norm = exam.a.toLowerCase().removeDiacritics();
             const year_str = exam.y.toString();
-            return year_str.includes(query_norm) || query_norm.includes(year_str) ||
-                title_norm.includes(query_norm) || query_norm.includes(title_norm) ||
-                author_norm.includes(query_norm) || query_norm.includes(author_norm);
+            return query_norm.includesBothways(year_str) ||
+                query_norm.includesBothways(title_norm) ||
+                query_norm.includesBothways(author_norm);
         })
     }
 
+    create_exam_list(exams);
+}
+
+function create_exam_list(exams) {
     // Create exam list elements
     const exam_list = $("#exam-list");
     exam_list.empty();
@@ -99,7 +87,6 @@ function search(query) {
             select_exam(exam, exam_li, false);
         }
     }
-    $.each()
 }
 
 function select_exam(exam, exam_li, unselect) {
@@ -110,7 +97,7 @@ function select_exam(exam, exam_li, unselect) {
         let last_li = exam_li;
         for (let i = 0; i < exam.h.length; i++) {
             const file_hash = exam.h[i];
-            const file_url = `exam/${file_hash.substr(0, 2)}/${file_hash}.pdf`;
+            const file_url = `${EXAM_LOCATION}${file_hash.substr(0, 2)}/${file_hash}.pdf`;
             last_li = $("<li/>")
                 .addClass("file-item")
                 .text(`Fichier ${i + 1}`)
@@ -125,23 +112,9 @@ function select_exam(exam, exam_li, unselect) {
     }
 }
 
-function main() {
+function init() {
     load_exams();
-
-    // Register search event
-    let debounce = null;
-    const search_input = $("#search");
-    search_input.on("keyup", _ => {
-        clearTimeout(debounce);
-        debounce = setTimeout(() => {
-            search(search_input.val())
-        }, SEARCH_DEBOUNCE)
-    }).keypress(e => {
-        if (e.which === 13) {
-            search(search_input.val());
-            return false;
-        }
-    })
+    register_search_events($("#search"), search);
 }
 
-$(document).ready(main);
+$(document).ready(init);

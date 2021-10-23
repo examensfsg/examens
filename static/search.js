@@ -1,30 +1,20 @@
-ROOT_DB_JSON = "db/root.json";
-
+COURSES_JSON = "root.json";
 SEARCH_DEBOUNCE = 250;
 
-let root_json = null;
-
-String.prototype.removeDiacritics = function () {
-    return this.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-};
+let courses_dict = null;
 
 function load_courses() {
-    $.getJSON(ROOT_DB_JSON, data => {
-        root_json = data;
+    $.getJSON(DB_LOCATION + COURSES_JSON, data => {
+        courses_dict = data.courses;
         search(null);
 
         // Set exam count
-        $("#exam_count").text(root_json.exam_count);
+        $("#exam_count").text(data.exam_count);
     })
 }
 
-/**
- * Update courses list for search query.
- * @param query Search query, can be null for none.
- */
 function search(query) {
     // Get courses code and name from root JSON, sort alphabetically by course code
-    const courses_dict = root_json.courses;
     let courses = [];
     for (let code in courses_dict) {
         courses.push({code: code, name: courses_dict[code]})
@@ -36,11 +26,15 @@ function search(query) {
         const query_norm = query.trim().toLowerCase().removeDiacritics();
         courses = courses.filter(course => {
             const name_norm = course.name.toLowerCase().removeDiacritics();
-            return course.code.includes(query_norm) || query_norm.includes(course.code) ||
-                name_norm.includes(query_norm) || query_norm.includes(name_norm);
+            return query_norm.includesBothways(course.code) ||
+                query_norm.includesBothways(name_norm);
         })
     }
 
+    create_course_list(courses);
+}
+
+function create_course_list(courses) {
     // Create course list elements
     const course_list = $("#course-list");
     course_list.empty();
@@ -60,23 +54,9 @@ function search(query) {
     }
 }
 
-function main() {
+function init() {
     load_courses();
-
-    // Register search event
-    let debounce = null;
-    const search_input = $("#search");
-    search_input.on("keyup", _ => {
-        clearTimeout(debounce);
-        debounce = setTimeout(() => {
-            search(search_input.val())
-        }, SEARCH_DEBOUNCE)
-    }).keypress(e => {
-        if (e.which === 13) {
-            search(search_input.val());
-            return false;
-        }
-    })
+    register_search_events($("#search"), search);
 }
 
-$(document).ready(main);
+$(document).ready(init);

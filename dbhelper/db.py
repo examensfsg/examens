@@ -108,9 +108,13 @@ class Database:
         try:
             with open(db_path / f"{course_code}.json", "r") as course_file:
                 course_json = json.load(course_file)
-                self.add_course(course, course_name)
-                for exam in course_json:
-                    self._load_exam(course, exam)
+                exams_list = course_json.get("exams", None)
+                if isinstance(exams_list, list):
+                    self.add_course(course, course_name)
+                    for exam in exams_list:
+                        self._load_exam(course, exam)
+                else:
+                    raise Database("Invalid course JSON")
         except IOError as e:
             raise DatabaseError(f"Error reading course JSON file {course_code}: {e}")
 
@@ -226,7 +230,9 @@ class Database:
         # save JSON file per course
         for course, exams in course_exams.items():
             with open(db_path / f"{course.canonical_name()}.json", "w") as course_file:
-                exams_json = []
+                exams_json = {}
+                exams_json["name"] = self.course_names[course]
+                exams_list = []
                 for e in exams:
                     exam_json = {DB_EXAM_ID_FIELD: e.id}
                     if e.author:
@@ -238,7 +244,8 @@ class Database:
                     if e.date_added:
                         exam_json[DB_EXAM_DATE_ADDED_FIELD] = e.date_added.strftime(DATE_FORMAT)
                     exam_json[DB_EXAM_HASHES_FIELD] = e.hashes
-                    exams_json.append(exam_json)
+                    exams_list.append(exam_json)
+                exams_json["exams"] = exams_list
                 json.dump(exams_json, course_file, separators=(',', ':'), ensure_ascii=False)
 
     def __repr__(self) -> str:

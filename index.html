@@ -2,15 +2,17 @@
 <html lang="fr">
 <head>
     <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Banque d'examens FSG</title>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="static/utils.js"></script>
     <script src="static/search.js"></script>
     <link href="static/style.css" rel="stylesheet"/>
     <link rel="icon" href="data:,">
 </head>
 <body>
     <h1><a href=".">Banque d'examens FSG</a></h1>
-    <p class="exam_count"><span id="exam_count"></span> examens disponibles</p>
+    <p class="exam_count"><span id="exam_count">—</span> examens disponibles</p>
     <label for="search" hidden="hidden">Recherche</label>
     <input id="search" type="text" class="search" name="fsg_exam_search" placeholder="Trouver un cours" autofocus/>
     <ul class="list" id="course-list"></ul>
