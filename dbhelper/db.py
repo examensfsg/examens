@@ -21,7 +21,7 @@ DB_EXAM_HASHES_FIELD = "h"
 DATE_FORMAT = "%Y-%m-%d"
 
 HASH_REGEX = re.compile(r"^[0-9a-f]{40}$")
-COURSE_REGEX = re.compile(r"^([a-z]{3})-([0-9]{4})$")
+COURSE_REGEX = re.compile(r"^([A-Za-z]{3})-([0-9]{4})$")
 
 
 class DatabaseError(RuntimeError):
@@ -40,7 +40,7 @@ class Course:
         match = COURSE_REGEX.match(code)
         if not match:
             raise ValueError(f"Invalid course code '{code}'")
-        return Course(match.group(1), int(match.group(2)))
+        return Course(match.group(1).lower(), int(match.group(2)))
 
     def canonical_name(self) -> str:
         return f"{self.department}-{self.number:0>4}"

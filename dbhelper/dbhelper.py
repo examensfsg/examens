@@ -162,6 +162,47 @@ class DatabaseHelper:
                     raise DatabaseError(f"Missing field for exam in batch data JSON: {e}")
             print(f"Successfully added {count} exams to database")
 
+    def regex_batch_add_exam(self, input_dir: PathLike, expr: str, force: bool = False,
+                             confirm: bool = True) -> None:
+        try:
+            regex = re.compile(expr)
+        except re.error as e:
+            raise DatabaseError(f"Invalid regex: {e}")
+
+        exams = {}
+        for file in Path(input_dir).iterdir():
+            match = regex.fullmatch(file.stem)
+            if match:
+                try:
+                    course = match.group("course")
+                    year = int(match.group("year"))
+                    semester = match.group("semester")
+                except IndexError as e:
+                    raise DatabaseError(f"Missing required named group: {e}")
+                except ValueError:
+                    raise DatabaseError(f"Invalid year '{match.group('year')}'")
+                try:
+                    author = match.group("author")
+                except IndexError:
+                    author = None
+                try:
+                    title = match.group("title")
+                except IndexError:
+                    title = None
+                key = (course, author, year, semester, title)
+                if key in exams:
+                    exams[key].append(file)
+                else:
+                    exams[key] = [file]
+
+        for exam, files in exams.items():
+            # sort by length so that solution appears last (usually longer)
+            files.sort(key=lambda f: len(f.name))
+            self.add_exam(*exam, files, force=force, confirm=confirm)
+            print()
+
+        print(f"Successfully added {len(exams)} exams to database")
+
     def edit_exam(self, exam_id: Optional[int], course: Optional[str], author: Optional[str],
                   year: Optional[int], semester: Optional[str], title: Optional[str],
                   course_name: Optional[str], hashes: List[str], confirm: bool = False):

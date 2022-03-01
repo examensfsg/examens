@@ -48,11 +48,25 @@ add_parser.add_argument(
     help="PDF files to add to database. At least one is required.")
 add_exam_fields_options(add_parser)
 add_parser.add_argument(
-    "--batch", type=str, action="store", dest="batch", default=False,
+    "--batch", type=str, action="store", dest="batch",
     help="Raw JSON data to add exams in batch mode. The expected JSON structure is a list of "
          "objects with the all of the following fields: 'course', 'author', 'year', 'semester', "
          "'title', 'files'. The format is the same as otherwise expected by parameters."
          "Files is a list of PDF filenames for each exam.")
+add_parser.add_argument("--batch-regex", type=str, action="store", dest="batch_regex",
+                        help="Alternative method to add exams in batch mode. "
+                             "The given regex will match all PDF files in the input directory. "
+                             "The regex must have named groups for 'course', 'year' and 'semester',"
+                             " and may also have named groups for 'author' and 'title'. "
+                             "If more several files have the same fields, they are considered part"
+                             "of the same exam. Here's an example regex: "
+                             "'(?P<course>\w{3}-\d{4})-(?P<author>.*)-(?P<title>.*?)"
+                             "-(?P<year>\d{4})(?P<semester>[AHE]).*', "
+                             "which will match the following files: "
+                             "'gel-1000-John Doe-Exam 1-2020H.pdf', "
+                             "'gel-1000-John Doe-Exam 1-2020H-sol.pdf', "
+                             "'gel-1001-John Smith-Exam 2-2001A.pdf', etc."
+                             "A file must be a full match (except the extension) to be added.")
 add_parser.add_argument(
     "-f", "--force", action="store_true", dest="force", default=False,
     help="Disable checks to skip operation if a similar exam already exists")
@@ -124,6 +138,9 @@ def main():
         if args.command == "add":
             if args.batch:
                 helper.batch_add_exam(args.batch, force=args.force)
+            elif args.batch_regex:
+                helper.regex_batch_add_exam(args.files[0], args.batch_regex,
+                                            force=args.force, confirm=args.confirm)
             else:
                 helper.add_exam(args.course, args.author, args.year, args.semester,
                                 args.title, args.files, args.course_name,
