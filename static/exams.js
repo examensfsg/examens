@@ -59,11 +59,11 @@ function search() {
         const query_norm = query.trim().toLowerCase().removeDiacritics();
         exams = exams.filter(exam => {
             const title_norm = exam.t.toLowerCase().removeDiacritics();
-            const author_norm = exam.a.toLowerCase().removeDiacritics();
+            const author_norm = exam.a ? exam.a.toLowerCase().removeDiacritics() : "";
             const year_str = exam.y.toString();
             return query_norm.includesBothways(year_str) ||
                 query_norm.includesBothways(title_norm) ||
-                query_norm.includesBothways(author_norm);
+                exam.a && query_norm.includesBothways(author_norm);
         })
     }
 
